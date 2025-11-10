@@ -6,158 +6,92 @@
  * This example demonstrates training a color classifier through ml5.neuralNetwork.
  */
 
-// Variables para el manejo de imágenes y modelo
-let classifier;
-let currentImage;
-let ready = false;
-let images = [];
-let labels = [];
+// Step 1: load data or create some data
+let data = [
+  { r: 255, g: 0, b: 0, color: "red-ish" },
+  { r: 254, g: 0, b: 0, color: "red-ish" },
+  { r: 253, g: 0, b: 0, color: "red-ish" },
+  { r: 0, g: 255, b: 0, color: "green-ish" },
+  { r: 0, g: 254, b: 0, color: "green-ish" },
+  { r: 0, g: 253, b: 0, color: "green-ish" },
+  { r: 0, g: 0, b: 255, color: "blue-ish" },
+  { r: 0, g: 0, b: 254, color: "blue-ish" },
+  { r: 0, g: 0, b: 253, color: "blue-ish" },
+];
 
-// Asegurar que TensorFlow.js use el backend correcto
-async function initializeML() {
-    await ml5.tf.setBackend('webgl');
-    await ml5.tf.ready();
-    console.log('TensorFlow backend:', ml5.tf.getBackend());
-}
+let classifer;
+let r = 255;
+let g = 0;
+let b = 0;
+let rSlider, gSlider, bSlider;
+let label = "training";
 
-// Función para cargar imágenes
-function preload() {
-  // Cargar imágenes de anverso
-  for (let i = 1; i <= 10; i++) {
-    let img = loadImage(`data/raw/1000_anverso/1000(${i}).jpg`);
-    images.push(img);
-    labels.push("anverso");
-  }
-  
-  // Cargar imágenes de reverso
-  for (let i = 1; i <= 10; i++) {
-    let img = loadImage(`data/raw/1000_reverso/1000(${i}).jpg`);
-    images.push(img);
-    labels.push("reverso");
-  }
-}
+function setup() {
+  createCanvas(640, 240);
 
-async function setup() {
-  // Crear el canvas dentro del contenedor específico
-  let canvas = createCanvas(400, 400);
-  canvas.parent('canvas-container');
-  background(255);
-  
-  try {
-    // Inicializar ML antes de cualquier operación
-    await initializeML();
-    
-    // Step 2: Configurar las opciones de la red neuronal
-    let options = {
-      inputs: [224, 224, 4], // Tamaño de entrada para las imágenes
-      task: 'imageClassification',
-      debug: true
-    };
+  // For this example to work across all browsers
+  // "webgl" or "cpu" needs to be set as the backend
+  ml5.setBackend("webgl");
 
-    // Step 3: Inicializar la red neuronal
-    classifier = ml5.neuralNetwork(options);
-    
-    // Step 4: Procesar y agregar las imágenes al conjunto de entrenamiento
-    processImages();
-  } catch (error) {
-    console.error('Error durante la inicialización:', error);
-    updateStatus('Error durante la inicialización. Por favor, recarga la página.');
+  rSlider = createSlider(0, 255, 255).position(10, 20);
+  gSlider = createSlider(0, 255, 0).position(10, 40);
+  bSlider = createSlider(0, 255, 0).position(10, 60);
+
+  // Step 2: set your neural network options
+  let options = {
+    task: "classification",
+    debug: true,
+  };
+
+  // Step 3: initialize your neural network
+  classifier = ml5.neuralNetwork(options);
+
+  // Step 4: add data to the neural network
+  for (let i = 0; i < data.length; i++) {
+    let item = data[i];
+    let inputs = [item.r, item.g, item.b];
+    let outputs = [item.color];
+    classifier.addData(inputs, outputs);
   }
-}
-// Función para procesar las imágenes y agregarlas al conjunto de entrenamiento
-function processImages() {
-  updateStatus('Procesando imágenes de entrenamiento...');
-  
-  for (let i = 0; i < images.length; i++) {
-    let img = images[i];
-    // Redimensionar la imagen a 224x224
-    img.resize(224, 224);
-    let imageData = {
-      data: img,
-      label: labels[i]
-    };
-    classifier.addData({ image: imageData.data }, { label: imageData.label });
-    updateStatus(`Procesando imágenes: ${i + 1}/${images.length}`);
-  }
-  
-  updateStatus('Comenzando entrenamiento...');
-  // Normalizar los datos y comenzar el entrenamiento
+
+  // Step 5: normalize your data;
   classifier.normalizeData();
-  classifier.train({ 
-    epochs: 50,
-    batchSize: 16 
-  }, finishedTraining, onEpochEnd);
-}
 
-// Función para mostrar el progreso del entrenamiento
-function onEpochEnd(epoch, logs) {
-  updateStatus(`Entrenando... Época ${epoch + 1}/50 - Pérdida: ${logs.loss.toFixed(4)}`);
+  // Step 6: train your neural network
+  let trainingOptions = {
+    epochs: 32,
+    batchSize: 12,
+  };
+  classifier.train(trainingOptions, finishedTraining);
 }
-
-// Step 7: Cuando termine el entrenamiento
+// Step 7: use the trained model
 function finishedTraining() {
-  ready = true;
-  updateStatus('¡Modelo listo! Arrastra una imagen o haz clic para seleccionar una.');
-}
-
-// Función para manejar el arrastre de archivos
-function dropHandler(file) {
-  if (file.type === 'image') {
-    updateStatus('Cargando imagen...');
-    console.log("cargando imagen...")
-    currentImage = loadImage(file.data, imageReady);
-  }
-}
-
-// Cuando la imagen esté cargada, clasificarla
-function imageReady() {
-  updateStatus('Procesando imagen...');
-  console.log("procesando imagen...")
-  currentImage.resize(224, 224);
   classify();
 }
 
-// Step 8: Clasificar la imagen
+// Step 8: make a classification
 function classify() {
-  if (currentImage && ready) {
-    classifier.classify({ image: currentImage }, handleResults);
-  }
+  let input = [r, g, b];
+  classifier.classify(input, handleResults);
 }
 
 function draw() {
-  background(255);
-  
-  // Mostrar la imagen actual si existe
-  if (currentImage) {
-    // Calcular el factor de escala para ajustar la imagen al canvas
-    let scale = min(width / currentImage.width, height / currentImage.height) * 0.8;
-    let scaledW = currentImage.width * scale;
-    let scaledH = currentImage.height * scale;
-    
-    // Centrar la imagen en el canvas
-    let x = (width - scaledW) / 2;
-    let y = (height - scaledH) / 2;
-    
-    // Dibujar la imagen escalada
-    image(currentImage, x, y, scaledW, scaledH);
-  } else {
-    // Mostrar mensaje cuando no hay imagen
-    textAlign(CENTER, CENTER);
-    textSize(16);
-    fill(150);
-    text('La imagen clasificada aparecerá aquí', width/2, height/2);
-  }
+  r = rSlider.value();
+  g = gSlider.value();
+  b = bSlider.value();
+  background(r, g, b);
+  textAlign(CENTER, CENTER);
+  textSize(64);
+  text(label, width / 2, height / 2);
 }
 
-// Step 9: Manejar los resultados de la clasificación
-function handleResults(error, results) {
+// Step 9: define a function to handle the results of your classification
+function handleResults(results, error) {
   if (error) {
     console.error(error);
-    updateStatus('Error al clasificar la imagen');
     return;
   }
-  
-  const prediction = results[0];
-  const confidence = nf(prediction.confidence * 100, 2, 1);
-  updateStatus(`Resultado: ${prediction.label} (Confianza: ${confidence}%)`);
+  label = results[0].label;
+  // console.log(results); // {label: 'red', confidence: 0.8};
+  classify();
 }
