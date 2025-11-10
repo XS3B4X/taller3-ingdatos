@@ -1,97 +1,237 @@
-/*
- * 👋 Hello! This is an ml5.js example made and shared with ❤️.
- * Learn more about the ml5.js project: https://ml5js.org/
- * ml5.js license and Code of Conduct: https://github.com/ml5js/ml5-next-gen/blob/main/LICENSE.md
- *
- * This example demonstrates training a color classifier through ml5.neuralNetwork.
- */
+let classifier;
+let imageUpload;
+let currentImage = null;
+let label = "Iniciando...";
+let isTraining = false;
+let imagesLoaded = 0;
+const IMAGE_SIZE = 160;
+const MODEL_PATH = './model/clasificador_utencilios';
 
-// Step 1: load data or create some data
-let data = [
-  { r: 255, g: 0, b: 0, color: "red-ish" },
-  { r: 254, g: 0, b: 0, color: "red-ish" },
-  { r: 253, g: 0, b: 0, color: "red-ish" },
-  { r: 0, g: 255, b: 0, color: "green-ish" },
-  { r: 0, g: 254, b: 0, color: "green-ish" },
-  { r: 0, g: 253, b: 0, color: "green-ish" },
-  { r: 0, g: 0, b: 255, color: "blue-ish" },
-  { r: 0, g: 0, b: 254, color: "blue-ish" },
-  { r: 0, g: 0, b: 253, color: "blue-ish" },
-];
+const TRAIN_SIZE = 46; // Imágenes para entrenamiento por clase
+const TEST_SIZE = 7; // Imágenes para prueba por clase
+const VAL_SIZE = 7; // Imágenes para validación por clase
+const TOTAL_PER_CLASS = TRAIN_SIZE + TEST_SIZE + VAL_SIZE;
+const TOTAL_IMAGES = TOTAL_PER_CLASS * 3;
 
-let classifer;
-let r = 255;
-let g = 0;
-let b = 0;
-let rSlider, gSlider, bSlider;
-let label = "training";
+let trainImages = {
+  cuchara: [],
+  cuchillo: [],
+  tenedor: []
+};
+
+let testImages = {
+  cuchara: [],
+  cuchillo: [],
+  tenedor: []
+};
+
+let valImages = {
+  cuchara: [],
+  cuchillo: [],
+  tenedor: []
+};
+
+function preload() {
+  loadTrainingImages();
+}
 
 function setup() {
-  createCanvas(640, 240);
+  createCanvas(640, 480);
 
-  // For this example to work across all browsers
-  // "webgl" or "cpu" needs to be set as the backend
   ml5.setBackend("webgl");
 
-  rSlider = createSlider(0, 255, 255).position(10, 20);
-  gSlider = createSlider(0, 255, 0).position(10, 40);
-  bSlider = createSlider(0, 255, 0).position(10, 60);
+  imageUpload = createFileInput(handleImage);
+  imageUpload.position(10, 10);
 
-  // Step 2: set your neural network options
-  let options = {
-    task: "classification",
-    debug: true,
+  const options = {
+    inputs: [IMAGE_SIZE, IMAGE_SIZE, 4],
+    task: 'imageClassification',
   };
 
-  // Step 3: initialize your neural network
   classifier = ml5.neuralNetwork(options);
 
-  // Step 4: add data to the neural network
-  for (let i = 0; i < data.length; i++) {
-    let item = data[i];
-    let inputs = [item.r, item.g, item.b];
-    let outputs = [item.color];
-    classifier.addData(inputs, outputs);
+  try {
+    fetch(MODEL_PATH + '.json')
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Modelo no encontrado');
+        }
+        return classifier.load(MODEL_PATH, modelLoaded);
+      })
+      .catch(error => {
+        console.log('Iniciando entrenamiento nuevo:', error.message);
+        loadAndTrainModel();
+      });
+  } catch (error) {
+    console.log('Error al cargar modelo, iniciando entrenamiento nuevo');
+    loadAndTrainModel();
   }
-
-  // Step 5: normalize your data;
-  classifier.normalizeData();
-
-  // Step 6: train your neural network
-  let trainingOptions = {
-    epochs: 32,
-    batchSize: 12,
-  };
-  classifier.train(trainingOptions, finishedTraining);
 }
-// Step 7: use the trained model
+
+function modelLoaded(error, model) {
+  if (error) {
+    console.log('Error al cargar el modelo, iniciando entrenamiento nuevo:', error);
+    loadAndTrainModel();
+  } else {
+    console.log('Modelo cargado exitosamente');
+    label = 'Listo para clasificar. Sube una imagen...';
+  }
+}
+
+function loadAndTrainModel() {
+  const checkImages = setInterval(() => {
+    if (imagesLoaded >= TOTAL_IMAGES && !isTraining) {
+      console.log('Imágenes cargadas, comenzando entrenamiento...');
+      isTraining = true;
+      clearInterval(checkImages);
+      addTrainingData();
+      
+      const trainingOptions = {
+        epochs: 35,
+        batchSize: 16,
+        learningRate: 0.0005
+      };
+      
+      classifier.train(trainingOptions, finishedTraining);
+    }
+  }, 500);
+}
 function finishedTraining() {
-  classify();
+  console.log('¡Entrenamiento completado!');
+  label = 'Guardando modelo...';
+  
+  classifier.save('clasificador_utencilios', () => {
+    console.log('Modelo guardado exitosamente');
+    label = 'Listo para clasificar. Sube una imagen...';
+  });
 }
 
-// Step 8: make a classification
-function classify() {
-  let input = [r, g, b];
-  classifier.classify(input, handleResults);
+function loadTrainingImages() {
+  for (let i = 1; i <= 50; i++) {
+    loadImage(
+      `data/cuchara/cuchara(${i}).jpg`,
+      img => {
+        img.resize(IMAGE_SIZE, IMAGE_SIZE);
+        cucharaImages.push(img);
+        imagesLoaded++;
+      },
+      () => console.log(`No se pudo cargar cuchara${i}.jpg`)
+    );
+    
+    loadImage(
+      `data/cuchillo/cuchillo(${i}).jpg`,
+      img => {
+        img.resize(IMAGE_SIZE, IMAGE_SIZE);
+        cuchilloImages.push(img);
+        imagesLoaded++;
+      },
+      () => console.log(`No se pudo cargar cuchillo${i}.jpg`)
+    );
+    
+    loadImage(
+      `data/tenedor/tenedor(${i}).jpg`,
+      img => {
+        img.resize(IMAGE_SIZE, IMAGE_SIZE);
+        tenedorImages.push(img);
+        imagesLoaded++;
+      },
+      () => console.log(`No se pudo cargar tenedor${i}.jpg`)
+    );
+  }
+}
+
+function addTrainingData() {
+  // Agregar datos de entrenamiento
+  for (const className in trainImages) {
+    for (let img of trainImages[className]) {
+      classifier.addData({ image: img }, { label: className });
+    }
+  }
+  
+  console.log('Datos agregados al conjunto de entrenamiento:');
+  console.log(`Cucharas: ${trainImages.cuchara.length}`);
+  console.log(`Cuchillos: ${trainImages.cuchillo.length}`);
+  console.log(`Tenedores: ${trainImages.tenedor.length}`);
+  
+  // Normalizar los datos
+  classifier.normalizeData();
+}
+
+// Función para evaluar el modelo con el conjunto de validación
+function evaluateModel() {
+  let correctPredictions = 0;
+  let totalPredictions = 0;
+  
+  // Evaluar cada clase
+  for (const className in valImages) {
+    for (let img of valImages[className]) {
+      classifier.classify({ image: img }, (error, results) => {
+        if (!error) {
+          totalPredictions++;
+          if (results[0].label === className) {
+            correctPredictions++;
+          }
+          
+          // Mostrar precisión cuando se complete la evaluación
+          if (totalPredictions === Object.values(valImages).flat().length) {
+            const accuracy = (correctPredictions / totalPredictions) * 100;
+            console.log(`Precisión en validación: ${accuracy.toFixed(2)}%`);
+          }
+        }
+      });
+    }
+  }
+}
+
+function handleImage(file) {
+  if (file.type === 'image') {
+    label = 'Procesando...';
+    currentImage = loadImage(file.data, img => {
+      img.resize(IMAGE_SIZE, IMAGE_SIZE);
+      classifier.classify({ image: img }, handleResults);
+    });
+  }
 }
 
 function draw() {
-  r = rSlider.value();
-  g = gSlider.value();
-  b = bSlider.value();
-  background(r, g, b);
+  background(220);
+  
+  if (currentImage) {
+    image(currentImage, width/2 - currentImage.width/2, 60);
+  }
+  
   textAlign(CENTER, CENTER);
-  textSize(64);
-  text(label, width / 2, height / 2);
+  textSize(32);
+  text(label, width/2, 40);
 }
 
-// Step 9: define a function to handle the results of your classification
-function handleResults(results, error) {
+function handleResults(error, result) {
   if (error) {
     console.error(error);
     return;
   }
-  label = results[0].label;
-  // console.log(results); // {label: 'red', confidence: 0.8};
-  classify();
+  
+  console.log('Predicción:', result);
+  
+  const predictions = [
+    { label: 'cuchara', confidence: result.cuchara || 0 },
+    { label: 'cuchillo', confidence: result.cuchillo || 0 },
+    { label: 'tenedor', confidence: result.tenedor || 0 }
+  ];
+  
+  predictions.sort((a, b) => b.confidence - a.confidence);
+  
+  const topPrediction = predictions[0];
+  let confidence = floor(topPrediction.confidence * 100);
+  
+  if (confidence < 50) {
+    label = `${topPrediction.label} (${confidence}% confianza - Baja certeza)`;
+  } else {
+    label = `${topPrediction.label} (${confidence}% confianza)`;
+  }
+  
+  console.log('Predicciones ordenadas:');
+  predictions.forEach(pred => {
+    console.log(`${pred.label}: ${floor(pred.confidence * 100)}%`);
+  });
 }

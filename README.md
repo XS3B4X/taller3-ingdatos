@@ -1,1 +1,1 @@
-# taller3-ingdatos
+# Taller 3: Creación de una red neuronal
