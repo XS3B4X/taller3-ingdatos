@@ -1,237 +1,203 @@
 let classifier;
-let imageUpload;
+let trainBtn;
+let uploadInput;
+let status;
+let result;
+let uploadedImage;
+let isModelReady = false;
 let currentImage = null;
 let label = "Iniciando...";
-let isTraining = false;
-let imagesLoaded = 0;
-const IMAGE_SIZE = 160;
-const MODEL_PATH = './model/clasificador_utencilios';
 
-const TRAIN_SIZE = 46; // Imágenes para entrenamiento por clase
-const TEST_SIZE = 7; // Imágenes para prueba por clase
-const VAL_SIZE = 7; // Imágenes para validación por clase
-const TOTAL_PER_CLASS = TRAIN_SIZE + TEST_SIZE + VAL_SIZE;
-const TOTAL_IMAGES = TOTAL_PER_CLASS * 3;
-
-let trainImages = {
-  cuchara: [],
-  cuchillo: [],
-  tenedor: []
-};
-
-let testImages = {
-  cuchara: [],
-  cuchillo: [],
-  tenedor: []
-};
-
-let valImages = {
-  cuchara: [],
-  cuchillo: [],
-  tenedor: []
-};
-
-function preload() {
-  loadTrainingImages();
-}
+const cubiertos = ['cuchara', 'cuchillo', 'tenedor'];
 
 function setup() {
-  createCanvas(640, 480);
+    createCanvas(640, 480);
+    trainBtn = select('#trainBtn');
+    uploadInput = select('#uploadInput');
+    status = select('#status');
+    result = select('#result');
 
-  ml5.setBackend("webgl");
+    ml5.setBackend("webgl");
 
-  imageUpload = createFileInput(handleImage);
-  imageUpload.position(10, 10);
-
-  const options = {
-    inputs: [IMAGE_SIZE, IMAGE_SIZE, 4],
-    task: 'imageClassification',
-  };
-
-  classifier = ml5.neuralNetwork(options);
-
-  try {
-    fetch(MODEL_PATH + '.json')
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Modelo no encontrado');
-        }
-        return classifier.load(MODEL_PATH, modelLoaded);
-      })
-      .catch(error => {
-        console.log('Iniciando entrenamiento nuevo:', error.message);
-        loadAndTrainModel();
-      });
-  } catch (error) {
-    console.log('Error al cargar modelo, iniciando entrenamiento nuevo');
-    loadAndTrainModel();
-  }
-}
-
-function modelLoaded(error, model) {
-  if (error) {
-    console.log('Error al cargar el modelo, iniciando entrenamiento nuevo:', error);
-    loadAndTrainModel();
-  } else {
-    console.log('Modelo cargado exitosamente');
-    label = 'Listo para clasificar. Sube una imagen...';
-  }
-}
-
-function loadAndTrainModel() {
-  const checkImages = setInterval(() => {
-    if (imagesLoaded >= TOTAL_IMAGES && !isTraining) {
-      console.log('Imágenes cargadas, comenzando entrenamiento...');
-      isTraining = true;
-      clearInterval(checkImages);
-      addTrainingData();
-      
-      const trainingOptions = {
-        epochs: 35,
+    const options = {
+        task: 'classification',
+        inputs: [224, 224, 4],
+        outputs: cubiertos.length,
+        epochs: 30,
         batchSize: 16,
-        learningRate: 0.0005
-      };
-      
-      classifier.train(trainingOptions, finishedTraining);
-    }
-  }, 500);
-}
-function finishedTraining() {
-  console.log('¡Entrenamiento completado!');
-  label = 'Guardando modelo...';
-  
-  classifier.save('clasificador_utencilios', () => {
-    console.log('Modelo guardado exitosamente');
-    label = 'Listo para clasificar. Sube una imagen...';
-  });
-}
-
-function loadTrainingImages() {
-  for (let i = 1; i <= 50; i++) {
-    loadImage(
-      `data/cuchara/cuchara(${i}).jpg`,
-      img => {
-        img.resize(IMAGE_SIZE, IMAGE_SIZE);
-        cucharaImages.push(img);
-        imagesLoaded++;
-      },
-      () => console.log(`No se pudo cargar cuchara${i}.jpg`)
-    );
+        numLabels: 3
+    };
     
-    loadImage(
-      `data/cuchillo/cuchillo(${i}).jpg`,
-      img => {
-        img.resize(IMAGE_SIZE, IMAGE_SIZE);
-        cuchilloImages.push(img);
-        imagesLoaded++;
-      },
-      () => console.log(`No se pudo cargar cuchillo${i}.jpg`)
-    );
-    
-    loadImage(
-      `data/tenedor/tenedor(${i}).jpg`,
-      img => {
-        img.resize(IMAGE_SIZE, IMAGE_SIZE);
-        tenedorImages.push(img);
-        imagesLoaded++;
-      },
-      () => console.log(`No se pudo cargar tenedor${i}.jpg`)
-    );
-  }
-}
+    classifier = ml5.neuralNetwork(options);
 
-function addTrainingData() {
-  // Agregar datos de entrenamiento
-  for (const className in trainImages) {
-    for (let img of trainImages[className]) {
-      classifier.addData({ image: img }, { label: className });
+    try {
+        classifier.load('model/model.json', modelLoaded);
+    } catch (error) {
+        console.log('No se ha encontrado un modelo preentrenado. El modelo está listo para entrenar.');
+        modelLoaded();
     }
-  }
-  
-  console.log('Datos agregados al conjunto de entrenamiento:');
-  console.log(`Cucharas: ${trainImages.cuchara.length}`);
-  console.log(`Cuchillos: ${trainImages.cuchillo.length}`);
-  console.log(`Tenedores: ${trainImages.tenedor.length}`);
-  
-  // Normalizar los datos
-  classifier.normalizeData();
-}
 
-// Función para evaluar el modelo con el conjunto de validación
-function evaluateModel() {
-  let correctPredictions = 0;
-  let totalPredictions = 0;
-  
-  // Evaluar cada clase
-  for (const className in valImages) {
-    for (let img of valImages[className]) {
-      classifier.classify({ image: img }, (error, results) => {
-        if (!error) {
-          totalPredictions++;
-          if (results[0].label === className) {
-            correctPredictions++;
-          }
-          
-          // Mostrar precisión cuando se complete la evaluación
-          if (totalPredictions === Object.values(valImages).flat().length) {
-            const accuracy = (correctPredictions / totalPredictions) * 100;
-            console.log(`Precisión en validación: ${accuracy.toFixed(2)}%`);
-          }
-        }
-      });
-    }
-  }
-}
-
-function handleImage(file) {
-  if (file.type === 'image') {
-    label = 'Procesando...';
-    currentImage = loadImage(file.data, img => {
-      img.resize(IMAGE_SIZE, IMAGE_SIZE);
-      classifier.classify({ image: img }, handleResults);
+    trainBtn.mousePressed(() => {
+        console.log('Iniciando Entrenamiento');
+        trainModel();
     });
-  }
+    
+    uploadInput.changed((e) => {
+        console.log('Archivo cargado');
+        handleUpload(e);
+    });
+}
+
+function modelLoaded() {
+    console.log('Modelo Listo');
+    status.html('Modelo listo. Puede cargar una imagen o entrenar un nuevo modelo.');
+    label = 'Modelo listo. Cargue una imagen';
+    isModelReady = true;
+}
+
+async function trainModel() {
+    console.log('Comenzando a cargar imágenes para entrenamiento...');
+    status.html('Cargando imágenes para entrenamiento...');
+    label = 'Cargando imágenes...';
+    
+    try {
+        await addImagesToClassifier();
+        status.html('Todas las imágenes cargadas. Iniciando entrenamiento...');
+        label = 'Iniciando entrenamiento...';
+        
+        const trainingOptions = {
+            epochs: 30,
+            batchSize: 16
+        };
+
+        classifier.train(trainingOptions, (epoch, loss) => {
+            const progress = ((epoch + 1) / trainingOptions.epochs * 100).toFixed(1);
+            status.html(`Entrenando: Época: ${epoch}, Perdida: ${loss}`);
+            label = `Entrenando ${progress}%`;
+        }, () => {
+            console.log('Entrenamiento completo');
+            status.html('Entrenamiento completo. Listo para clasificar');
+            label = '¡Entrenamiento completo!';
+            isModelReady = true;
+            classifier.save('model');
+        });
+    } catch (error) {
+        console.error("Error en entrenamiento:", error);
+        status.html('Error durante el entrenamiento. Revise la consola para más detalles.');
+    }
+}
+
+function addImagesToClassifier() {
+    const promises = [];
+    let loadedImages = 0;
+    
+    cubiertos.forEach(cubierto => {
+        for (let i = 1; i <= 50; i++) {
+            const imgPath = `data/${cubierto}/${cubierto}(${i}).jpg`;
+            const promise = new Promise((resolve, reject) => {
+                loadImage(imgPath, img => {
+                    loadedImages++;
+                    status.html(`Loading images: ${loadedImages}/${cubiertos.length * 50}`);
+                    let buffer = createGraphics(224, 224);
+                    buffer.image(img, 0, 0, 224, 224);
+                    classifier.addData(
+                        { image: buffer.get() }, 
+                        { label: cubierto }
+                    );
+                    
+                    buffer.remove();
+                    resolve();
+                }, () => {
+                    console.error(`Falló al cargar imagen: ${imgPath}`);
+                    reject(new Error(`Falló al cargar imagen: ${imgPath}`));
+                });
+            });
+            promises.push(promise);
+        }
+    });
+    
+    return Promise.all(promises).then(() => {
+        console.log('Normalizando datos...');
+        classifier.normalizeData();
+    });
+}
+
+function handleUpload(event) {
+    if (event.target.files && event.target.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            loadImage(e.target.result, img => {
+                let buffer = createGraphics(224, 224);
+                buffer.image(img, 0, 0, 224, 224);
+                uploadedImage = buffer.get();
+                currentImage = img; // Guardamos la imagen original para mostrarla
+                buffer.remove();
+                
+                if (isModelReady) {
+                    classifyImage();
+                } else {
+                    status.html('Entrene el modelo primero.');
+                    label = 'Entrene el modelo primero';
+                }
+            });
+        };
+        reader.readAsDataURL(event.target.files[0]);
+    }
+}
+
+function classifyImage() {
+    if (!classifier || !isModelReady) {
+        status.html('Modelo no listo, por favor entrene el modelo primero.');
+        label = 'Modelo no listo';
+        return;
+    }
+
+    status.html('Clasificando imagen...');
+    label = 'Clasificando...';
+    
+    classifier.classify({ image: uploadedImage }, (error, results) => {
+        if (error) {
+            console.error('Error de clasificación:', error);
+            status.html('Error clasificando imagen.');
+            label = 'Error en la clasificación';
+            return;
+        }
+        
+        if (results && results[0]) {
+            const confidence = results[0].confidence * 100;
+            if (confidence > 80) {
+                result.html(`Clasificación: ${results[0].label} (${confidence.toFixed(2)}% confident)`);
+                label = `${results[0].label} (${confidence.toFixed(2)}% confianza)`;
+            } else {
+                result.html(`Predicción de baja confianza: ${results[0].label} (${confidence.toFixed(2)}%)`);
+                label = `${results[0].label} (${confidence.toFixed(2)}% - Baja confianza)`;
+            }
+            status.html('Clasificación completa.');
+        }
+    });
 }
 
 function draw() {
-  background(220);
-  
-  if (currentImage) {
-    image(currentImage, width/2 - currentImage.width/2, 60);
-  }
-  
-  textAlign(CENTER, CENTER);
-  textSize(32);
-  text(label, width/2, 40);
-}
-
-function handleResults(error, result) {
-  if (error) {
-    console.error(error);
-    return;
-  }
-  
-  console.log('Predicción:', result);
-  
-  const predictions = [
-    { label: 'cuchara', confidence: result.cuchara || 0 },
-    { label: 'cuchillo', confidence: result.cuchillo || 0 },
-    { label: 'tenedor', confidence: result.tenedor || 0 }
-  ];
-  
-  predictions.sort((a, b) => b.confidence - a.confidence);
-  
-  const topPrediction = predictions[0];
-  let confidence = floor(topPrediction.confidence * 100);
-  
-  if (confidence < 50) {
-    label = `${topPrediction.label} (${confidence}% confianza - Baja certeza)`;
-  } else {
-    label = `${topPrediction.label} (${confidence}% confianza)`;
-  }
-  
-  console.log('Predicciones ordenadas:');
-  predictions.forEach(pred => {
-    console.log(`${pred.label}: ${floor(pred.confidence * 100)}%`);
-  });
+    background(220);
+    
+    // Si hay una imagen cargada, mostrarla en el canvas
+    if (uploadedImage) {
+        currentImage = uploadedImage;
+    }
+    
+    if (currentImage) {
+        const scale = min(width / currentImage.width, height / currentImage.height) * 0.8;
+        const w = currentImage.width * scale;
+        const h = currentImage.height * scale;
+        const x = (width - w) / 2;
+        const y = (height - h) / 2;
+        image(currentImage, x, y, w, h);
+    }
+    
+    // Mostrar el texto del estado actual
+    textAlign(CENTER, CENTER);
+    textSize(32);
+    fill(0);
+    noStroke();
+    text(label, width/2, 40);
 }

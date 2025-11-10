@@ -1,0 +1,1 @@
+{"inputUnits":[224,224,4],"outputUnits":3,"inputs":{"image":{"dtype":"array","min":0,"max":255}},"outputs":{"label":{"dtype":"string","min":0,"max":1,"uniqueValues":["cuchara","cuchillo","tenedor"],"legend":{"cuchara":[1,0,0],"cuchillo":[0,1,0],"tenedor":[0,0,1]}}},"isNormalized":true}

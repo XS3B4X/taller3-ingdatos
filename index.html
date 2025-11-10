@@ -12,11 +12,17 @@
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ml5.js neuralNetwork Color Classifier Example</title>
+    <title>Clasificador de Cubiertos con ml5.js</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.10/p5.min.js"></script>
     <script src="https://unpkg.com/ml5@1/dist/ml5.min.js"></script>
   </head>
   <body>
+    <div style="margin: 20px;">
+      <div id="status">Estado: Iniciando...</div>
+      <input type="file" id="uploadInput" accept="image/*">
+      <button id="trainBtn">Entrenar Modelo</button>
+      <div id="result" style="margin-top: 20px;"></div>
+    </div>
     <script src="sketch.js"></script>
   </body>
 </html>
